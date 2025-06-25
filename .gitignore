@@ -21,6 +21,9 @@ bin/
 # Local .terraform directories
 .terraform/
 
+### Python ###
+.venv
+
 # .tfstate files
 *.tfstate
 *.tfstate.*
