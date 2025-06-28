@@ -1,4 +1,4 @@
-package se.loelindstrom.entrastuff.db.entities;
+package se.loelindstrom.entrastuff.entities;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "backups")
 @Data
-public class BackupRecord {
+public class Backup {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

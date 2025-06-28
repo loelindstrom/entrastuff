@@ -17,6 +17,10 @@ bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
 
+### ENV vraiables ###
+/secrets.env
+*.env
+
 ### Terraform ###
 # Local .terraform directories
 .terraform/
