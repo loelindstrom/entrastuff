@@ -3,6 +3,7 @@ package se.loelindstrom.entrastuff.controllers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 import se.loelindstrom.entrastuff.config.TokenStore;
+import se.loelindstrom.entrastuff.dtos.BackupDTO;
 import se.loelindstrom.entrastuff.entities.Backup;
 import se.loelindstrom.entrastuff.repositories.BackupRepository;
 
@@ -43,6 +45,8 @@ public class BackupController {
         this.tenantId = tenantId;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     @PostMapping("/backup-users")
@@ -64,6 +68,17 @@ public class BackupController {
         } catch (Exception e) {
             logger.error("Failed to process users: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body("Failed to process users: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/backups")
+    public ResponseEntity<String> getBackups() {
+        try {
+            List<BackupDTO> backups = backupRepository.findAllExcludingBackupData();
+            return ResponseEntity.ok(objectMapper.writeValueAsString(backups));
+        } catch (Exception e) {
+            logger.error("Failed to fetch backups: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body("Failed to fetch backups.");
         }
     }
 
