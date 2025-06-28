@@ -1,4 +1,7 @@
 package se.loelindstrom.entrastuff.repositories;
 
-public class BackupRepository {
+import org.springframework.data.jpa.repository.JpaRepository;
+import se.loelindstrom.entrastuff.entities.Backup;
+
+public interface BackupRepository extends JpaRepository<Backup, Long> {
 }
