@@ -20,6 +20,10 @@ spring:
     restart:
       enabled: true
 
+auth:
+  username: ${AUTH_USERNAME}
+  password: ${AUTH_PASSWORD}
+
 entra:
   tenant-id: ${ENTRA_TENANT_ID}
   client-id: ${ENTRA_CLIENT_ID}
