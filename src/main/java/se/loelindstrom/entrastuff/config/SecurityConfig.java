@@ -13,6 +13,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -31,9 +32,17 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // Don't protect webhook endpoint if validation token is sent:
+        RequestMatcher validationTokenMatcher = request ->
+                request.getRequestURI().startsWith("/api/webhook") &&
+                        request.getParameter("validationToken") != null;
+
+        // Protect all endpoints by default (except when validation token):
         http
+                .securityMatcher("/api/**")
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers(validationTokenMatcher).permitAll() // Allow validation requests
+                        .requestMatchers("/api/**").authenticated() // Require auth for all other /api/**
                         .anyRequest().denyAll()
                 )
                 .httpBasic(Customizer.withDefaults())

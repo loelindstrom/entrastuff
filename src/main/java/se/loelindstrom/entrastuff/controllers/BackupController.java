@@ -8,18 +8,19 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import se.loelindstrom.entrastuff.config.TokenStore;
 import se.loelindstrom.entrastuff.dtos.BackupDTO;
+import se.loelindstrom.entrastuff.entities.AuditLog;
 import se.loelindstrom.entrastuff.entities.Backup;
+import se.loelindstrom.entrastuff.repositories.AuditLogRepository;
 import se.loelindstrom.entrastuff.repositories.BackupRepository;
 
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -33,15 +34,18 @@ public class BackupController {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final BackupRepository backupRepository;
+    private final AuditLogRepository auditLogRepository;
     private final String tenantId;
 
     public BackupController(
             TokenStore tokenStore,
             BackupRepository backupRepository,
+            AuditLogRepository auditLogRepository,
             @Value("${entra.tenant-id}") String tenantId
     ) {
         this.tokenStore = tokenStore;
         this.backupRepository = backupRepository;
+        this.auditLogRepository = auditLogRepository;
         this.tenantId = tenantId;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
@@ -67,7 +71,7 @@ public class BackupController {
             return ResponseEntity.ok(objectMapper.writeValueAsString(allUsers));
         } catch (Exception e) {
             logger.error("Failed to process users: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body("Failed to process users: " + e.getMessage());
+            return ResponseEntity.status(500).body("Internal server error.");
         }
     }
 
@@ -78,7 +82,7 @@ public class BackupController {
             return ResponseEntity.ok(objectMapper.writeValueAsString(backups));
         } catch (Exception e) {
             logger.error("Failed to fetch backups: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body("Failed to fetch backups.");
+            return ResponseEntity.status(500).body("Internal server error.");
         }
     }
 
@@ -119,8 +123,91 @@ public class BackupController {
             return ResponseEntity.ok("Restored " + restoredCount + " users.");
         } catch (Exception e) {
             logger.error("Failed to restore backup {}: {}", backupId, e.getMessage(), e);
-            return ResponseEntity.status(500).body("Failed to restore backup: " + e.getMessage());
+            return ResponseEntity.status(500).body("Internal server error.");
         }
+    }
+
+    @PostMapping(value = "/webhook", consumes = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> handleWebhookValidation(@RequestParam(name = "validationToken", required = true) String validationToken) {
+        logger.info("Validation request received: validationToken={}", validationToken);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_PLAIN)
+                .body(validationToken);
+    }
+
+    @PostMapping(value = "/webhook", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> handleWebhookNotification(@RequestBody JsonNode payload) {
+        try {
+            logger.debug("Received notification: payload={}", payload.toString());
+
+            if (payload.has("value") && payload.get("value").isArray()) {
+                for (JsonNode event : payload.get("value")) {
+                    String resourceId = event.has("resource") ? event.get("resource").asText() : null;
+                    String eventType = determineEventType(event);
+                    LocalDateTime eventTimestamp = LocalDateTime.now();
+
+//                    AuditLog auditLog = new AuditLog(eventType, resourceId, eventTimestamp, event);
+//                    auditLogRepository.save(auditLog);
+                    logger.info("Saved audit log for event type: {}, resource: {}", eventType, resourceId);
+                }
+                return ResponseEntity.ok("Webhook processed.");
+            }
+
+            logger.warn("Invalid webhook notification: no valid payload");
+            return ResponseEntity.badRequest().body("Invalid webhook request.");
+        } catch (Exception e) {
+            logger.error("Failed to process webhook: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body("Internal server error.");
+        }
+    }
+
+    @PostMapping("/create-subscription")
+    public ResponseEntity<String> createSubscription(@RequestParam String notificationUrl) {
+        try {
+            logger.info("Will fetch token.");
+            String token = tokenStore.getAccessToken();
+            logger.info("Fetched token.");
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(token);
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+
+            ObjectNode subscription = objectMapper.createObjectNode();
+            subscription.put("changeType", "created,updated,deleted");
+            subscription.put("notificationUrl", notificationUrl);
+            subscription.put("resource", "users");
+            subscription.put("expirationDateTime", ZonedDateTime.now().plusDays(1)
+                    .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+            subscription.put("clientState", UUID.randomUUID().toString());
+
+            HttpEntity<String> request = new HttpEntity<>(objectMapper.writeValueAsString(subscription), headers);
+            ResponseEntity<String> response = restTemplate.exchange(
+                    "https://graph.microsoft.com/v1.0/subscriptions",
+                    HttpMethod.POST,
+                    request,
+                    String.class
+            );
+
+            logger.trace("Subscription creation response status: {}", response.getStatusCode());
+            logger.trace("Subscription creation response body: {}", response.getBody());
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new RuntimeException("Failed to create subscription: " + response.getStatusCode());
+            }
+
+            return ResponseEntity.ok("Subscription created: " + response.getBody());
+        } catch (Exception e) {
+            logger.error("Failed to create subscription: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body("Internal server error.");
+        }
+    }
+
+    private String determineEventType(JsonNode event) {
+        if (event.has("changeType")) {
+            String changeType = event.get("changeType").asText();
+            return "user." + changeType.toLowerCase();
+        }
+        return "unknown";
     }
 
     private int createUsersBatch(String token, List<JsonNode> users) throws Exception {

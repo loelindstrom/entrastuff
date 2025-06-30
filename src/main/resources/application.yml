@@ -23,6 +23,8 @@ spring:
 auth:
   username: ${AUTH_USERNAME}
   password: ${AUTH_PASSWORD}
+webhook:
+  url: https://${AUTH_USERNAME}:${AUTH_PASSWORD}@abc123:ngrok:io/api/webhook
 
 entra:
   tenant-id: ${ENTRA_TENANT_ID}
