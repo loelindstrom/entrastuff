@@ -16,6 +16,12 @@ public class AuditLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "event_type", nullable = false)
+    private String eventType;
+
+    @Column(name = "resource_id")
+    private String resourceId;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "event", columnDefinition = "jsonb", nullable = false)
     private JsonNode eventData;

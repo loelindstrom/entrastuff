@@ -15,6 +15,7 @@ import se.loelindstrom.entrastuff.config.TokenStore;
 import se.loelindstrom.entrastuff.dtos.BackupDTO;
 import se.loelindstrom.entrastuff.entities.AuditLog;
 import se.loelindstrom.entrastuff.entities.Backup;
+import se.loelindstrom.entrastuff.exceptions.InvalidClientStateException;
 import se.loelindstrom.entrastuff.repositories.AuditLogRepository;
 import se.loelindstrom.entrastuff.repositories.BackupRepository;
 
@@ -37,6 +38,7 @@ public class BackupController {
     private final AuditLogRepository auditLogRepository;
     private final String tenantId;
     private final String webhookUrl;
+    private String clientState;
 
     public BackupController(
             TokenStore tokenStore,
@@ -145,12 +147,18 @@ public class BackupController {
 
             if (payload.has("value") && payload.get("value").isArray()) {
                 for (JsonNode event : payload.get("value")) {
+                    validateClientState(event.get("clientState"));
+
                     String resourceId = event.has("resource") ? event.get("resource").asText() : null;
                     String eventType = determineEventType(event);
-                    LocalDateTime eventTimestamp = LocalDateTime.now();
 
-//                    AuditLog auditLog = new AuditLog(eventType, resourceId, eventTimestamp, event);
-//                    auditLogRepository.save(auditLog);
+                    AuditLog auditLog = new AuditLog();
+                    auditLog.setEventType(determineEventType(event));
+                    auditLog.setResourceId(event.has("resource") ? event.get("resource").asText() : null);
+                    auditLog.setCreatedAt(LocalDateTime.now());
+                    auditLog.setEventData(event);
+                    auditLogRepository.save(auditLog);
+
                     logger.info("Saved audit log for event type: {}, resource: {}", eventType, resourceId);
                 }
                 return ResponseEntity.ok("Webhook processed.");
@@ -158,6 +166,9 @@ public class BackupController {
 
             logger.warn("Invalid webhook notification: no valid payload");
             return ResponseEntity.badRequest().body("Invalid webhook request.");
+        } catch (InvalidClientStateException e) {
+            logger.warn(e.getMessage());
+            return ResponseEntity.status(401).body("Unauthorized.");
         } catch (Exception e) {
             logger.error("Failed to process webhook: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body("Internal server error.");
@@ -181,7 +192,8 @@ public class BackupController {
             subscription.put("resource", "users");
             subscription.put("expirationDateTime", ZonedDateTime.now().plusDays(1)
                     .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
-            subscription.put("clientState", UUID.randomUUID().toString());
+            clientState = UUID.randomUUID().toString();
+            subscription.put("clientState", clientState);
 
             HttpEntity<String> request = new HttpEntity<>(objectMapper.writeValueAsString(subscription), headers);
             ResponseEntity<String> response = restTemplate.exchange(
@@ -211,6 +223,13 @@ public class BackupController {
             return "user." + changeType.toLowerCase();
         }
         return "unknown";
+    }
+
+    private void validateClientState(JsonNode clientState) {
+        String clientStateIncoming = clientState.asText();
+        if (clientStateIncoming == null || !(clientStateIncoming.equals(this.clientState))) {
+            throw new InvalidClientStateException("clientState was not as expected. Either it is misconfigured or hackers/externals are calling the endpoint.");
+        }
     }
 
     private int createUsersBatch(String token, List<JsonNode> users) throws Exception {
