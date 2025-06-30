@@ -1,13 +1,27 @@
+<!-- omit from toc -->
 # EntraStuff - Microsoft Graph API PoC 📊
+<!-- omit from toc -->
+## Table of Contents:
+- [Intro](#intro)
+  - [Endpoints](#endpoints)
+- [Prerequisites](#prerequisites)
+- [Setup Infrastructure](#setup-infrastructure)
+- [Spin Up Database Locally](#spin-up-database-locally)
+- [Run Application](#run-application)
+- [Test User Creation and Deletion](#test-user-creation-and-deletion)
+- [Test Webhook](#test-webhook)
 
+
+## Intro
 A Proof of Concept (PoC) for integrating with Microsoft Graph API to back up Entra ID user data. This Spring Boot application exposes endpoints to manage user backups and receive real-time updates via webhooks.
 
-## Endpoints
+### Endpoints
 - `POST /api/backup-users`: Backs up all Entra ID users to a local PostgreSQL database.
 - `GET /api/backups`: Retrieves info about all stored backups.
 - `POST /api/restore-users/{id}`: Restores a given backup, backup chosen by its ID.
 - `POST /api/create-subscription`: Registers a webhook for Entra ID user change notifications.
 - `POST /api/webhook`: Handles Graph API validation and change notifications.
+
 
 ## Prerequisites
 - **Java 24**: Install [JDK 24](https://www.oracle.com/java/technologies/javase/jdk24-archive-downloads.html).
@@ -117,6 +131,9 @@ These scripts use the values in the `.env` file for authentication towards the G
       python delete-users.py --domain yourcompany.onmicrosoft.com
       ```
 
+You can also find other python scripts in the same folder.  
+E.g. for cleaning up subscriptions.
+
 
 ## Test Webhook
 To register the webhook endpoint with Azure Entra/the Graph API, the webhook endpoint must be served over https on the public internet.  
@@ -131,6 +148,7 @@ To register the webhook endpoint with Azure Entra/the Graph API, the webhook end
    - Add `BASE_URL=<ngrok URL>` (without `https://`).
 3. **Restart Application**:
    ```bash
+   (ctr+c to stop previous)
    ./gradlew bootRun
    ```
 4. **Create Subscription**:
@@ -140,12 +158,7 @@ To register the webhook endpoint with Azure Entra/the Graph API, the webhook end
    - This registers the webhook endpoint with Graph API to receive user change notifications.
 5. **Verify Notifications**:
    - Update a user in Entra ID (e.g., change `displayName` in Azure Portal).
-   - **TODO**:
-      - ⚠ There is an issue that the Graph API/Entra doesn't use the provided auth. Therefore the request gets rejected before reaching the controller code.
-        One can see however that a request has been made by looking into Ngrok's dashboard online.
-        **_This should be fixed though._**
-   - **When TODO is fixed:**
-      - Check logs for `Saved audit log for event type: ...`.
-      - Query `audit_logs`: `SELECT * FROM audit_logs;`.
+   - Check logs for `Saved audit log for event type: ...`.
+   - Query `audit_logs`: `SELECT * FROM audit_logs;`.
 
 Happy coding! 🚀
