@@ -36,17 +36,20 @@ public class BackupController {
     private final BackupRepository backupRepository;
     private final AuditLogRepository auditLogRepository;
     private final String tenantId;
+    private final String webhookUrl;
 
     public BackupController(
             TokenStore tokenStore,
             BackupRepository backupRepository,
             AuditLogRepository auditLogRepository,
-            @Value("${entra.tenant-id}") String tenantId
+            @Value("${entra.tenant-id}") String tenantId,
+            @Value("${webhook.url}") String webhookUrl
     ) {
         this.tokenStore = tokenStore;
         this.backupRepository = backupRepository;
         this.auditLogRepository = auditLogRepository;
         this.tenantId = tenantId;
+        this.webhookUrl = webhookUrl;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
@@ -162,7 +165,7 @@ public class BackupController {
     }
 
     @PostMapping("/create-subscription")
-    public ResponseEntity<String> createSubscription(@RequestParam String notificationUrl) {
+    public ResponseEntity<String> createSubscription() {
         try {
             logger.info("Will fetch token.");
             String token = tokenStore.getAccessToken();
@@ -174,7 +177,7 @@ public class BackupController {
 
             ObjectNode subscription = objectMapper.createObjectNode();
             subscription.put("changeType", "created,updated,deleted");
-            subscription.put("notificationUrl", notificationUrl);
+            subscription.put("notificationUrl", this.webhookUrl);
             subscription.put("resource", "users");
             subscription.put("expirationDateTime", ZonedDateTime.now().plusDays(1)
                     .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
